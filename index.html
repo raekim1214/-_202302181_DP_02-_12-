@@ -1,0 +1,331 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A-Frame Space Planets</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script>
+      /* ── 고양이 형상 컴포넌트 ── */
+      AFRAME.registerComponent("cat-shape", {
+        schema: {
+          color:      { type: "color", default: "#ff9900" },
+          innerColor: { type: "color", default: "#ffcccc" }
+        },
+        init: function () {
+          var c  = this.data.color;
+          var ic = this.data.innerColor;
+          var el = this.el;
+          var mat = "metalness: 0.12; roughness: 0.68;";
+
+          function make(tag, attrs) {
+            var e = document.createElement(tag);
+            Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
+            el.appendChild(e);
+            return e;
+          }
+
+          // 몸통
+          make("a-sphere", { position:"0 -0.28 0", radius:"0.32", color:c, material:mat });
+          // 머리
+          make("a-sphere", { position:"0 0.20 0",  radius:"0.24", color:c, material:mat });
+          // 왼쪽 귀 (바깥)
+          make("a-cone",   { position:"-0.13 0.46 0", "radius-bottom":"0.09", "radius-top":"0.01",
+                             height:"0.20", rotation:"0 0 15",  color:c,  material:mat });
+          // 오른쪽 귀 (바깥)
+          make("a-cone",   { position:"0.13 0.46 0",  "radius-bottom":"0.09", "radius-top":"0.01",
+                             height:"0.20", rotation:"0 0 -15", color:c,  material:mat });
+          // 왼쪽 귀 (안쪽)
+          make("a-cone",   { position:"-0.13 0.455 0.015", "radius-bottom":"0.055", "radius-top":"0.005",
+                             height:"0.13", rotation:"0 0 15",  color:ic });
+          // 오른쪽 귀 (안쪽)
+          make("a-cone",   { position:"0.13 0.455 0.015",  "radius-bottom":"0.055", "radius-top":"0.005",
+                             height:"0.13", rotation:"0 0 -15", color:ic });
+          // 왼쪽 눈
+          make("a-sphere", { position:"-0.09 0.22 0.215", radius:"0.038",
+                             material:"shader:flat; emissive:#3355bb; emissiveIntensity:0.6; color:#111;" });
+          // 오른쪽 눈
+          make("a-sphere", { position:"0.09 0.22 0.215",  radius:"0.038",
+                             material:"shader:flat; emissive:#3355bb; emissiveIntensity:0.6; color:#111;" });
+          // 코
+          make("a-sphere", { position:"0 0.155 0.235", radius:"0.022",
+                             material:"shader:flat; color:#ff7eb3;" });
+          // 꼬리
+          make("a-torus",  { position:"0.28 -0.46 0", radius:"0.22", "radius-tubular":"0.045",
+                             rotation:"0 0 100", arc:"185", color:c, material:mat });
+        }
+      });
+
+      /* ── 테트리스 블록 컴포넌트 ── */
+      AFRAME.registerComponent("tetris-block", {
+        schema: {
+          piece: { type: "string", default: "T" },
+          color: { type: "color",  default: "#ff0000" },
+          url:   { type: "string", default: "" }
+        },
+        init: function () {
+          var piece = this.data.piece;
+          var color = this.data.color;
+          var url   = this.data.url;
+          var el    = this.el;
+          var S     = 0.38;
+          var G     = 0.42;
+          var mat   = "metalness:0.35; roughness:0.45; emissive:" + color + "; emissiveIntensity:0.25;";
+
+          var shapes = {
+            I: [[0,0],[1,0],[2,0],[3,0]],
+            O: [[0,0],[1,0],[0,1],[1,1]],
+            T: [[0,0],[1,0],[2,0],[1,1]],
+            S: [[1,0],[2,0],[0,1],[1,1]],
+            Z: [[0,0],[1,0],[1,1],[2,1]],
+            L: [[0,0],[0,1],[0,2],[1,0]],
+            J: [[0,0],[0,1],[0,2],[-1,0]]
+          };
+          var cells = shapes[piece] || shapes["T"];
+
+          var xs = cells.map(function(c){ return c[0]; });
+          var ys = cells.map(function(c){ return c[1]; });
+          var cx = (Math.min.apply(null,xs) + Math.max.apply(null,xs)) / 2;
+          var cy = (Math.min.apply(null,ys) + Math.max.apply(null,ys)) / 2;
+
+          cells.forEach(function(cell) {
+            var box = document.createElement("a-box");
+            box.setAttribute("position", ((cell[0]-cx)*G) + " " + ((cell[1]-cy)*G) + " 0");
+            box.setAttribute("width",  S);
+            box.setAttribute("height", S);
+            box.setAttribute("depth",  S);
+            box.setAttribute("color", color);
+            box.setAttribute("material", mat);
+
+            /* 링크 기능 */
+            if (url) {
+              box.setAttribute("class", "clickable");
+              box.addEventListener("click", function() {
+                window.open(url, "_blank");
+              });
+              /* 호버: CSS 포인터 커서 + 블록 확대 */
+              box.addEventListener("mouseenter", function() {
+                var canvas = document.querySelector("canvas");
+                if (canvas) canvas.style.cursor = "pointer";
+                el.setAttribute("scale", "1.25 1.25 1.25");
+              });
+              box.addEventListener("mouseleave", function() {
+                var canvas = document.querySelector("canvas");
+                if (canvas) canvas.style.cursor = "default";
+                el.setAttribute("scale", "1 1 1");
+              });
+            }
+
+            el.appendChild(box);
+          });
+        }
+      });
+
+      AFRAME.registerComponent("starfield", {
+        init: function () {
+          var group = document.createElement("a-entity");
+          for (var i = 0; i < 500; i += 1) {
+            var star = document.createElement("a-sphere");
+            var radius = 70;
+            var phi = Math.random() * Math.PI * 2;
+            var costheta = Math.random() * 2 - 1;
+            var theta = Math.acos(costheta);
+            var x = radius * Math.sin(theta) * Math.cos(phi);
+            var y = radius * Math.sin(theta) * Math.sin(phi);
+            var z = radius * Math.cos(theta);
+
+            star.setAttribute("position", x + " " + y + " " + z);
+            star.setAttribute("radius", 0.06 + Math.random() * 0.06);
+            star.setAttribute("color", "#ffffff");
+            star.setAttribute("material", "shader: flat; emissive: #ffffff; emissiveIntensity: 1;");
+            group.appendChild(star);
+          }
+          this.el.appendChild(group);
+        },
+      });
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #020617;
+      }
+    </style>
+  </head>
+  <body>
+    <a-scene background="color: #020617">
+      <!-- GLB 모델 에셋 등록 -->
+      <a-assets>
+        <a-asset-item id="my-model" src="model.glb"></a-asset-item>
+      </a-assets>
+
+      <a-entity starfield></a-entity>
+
+      <a-entity light="type: ambient; color: #667085; intensity: 0.8"></a-entity>
+      <a-entity
+        light="type: point; color: #ffffff; intensity: 1.2; distance: 90"
+        position="0 6 6"
+      ></a-entity>
+
+      <!-- ■■ 떨어지는 테트리스 블록들 (클릭 → jstris 이동) ■■ -->
+
+      <!-- I - 시안 -->
+      <a-entity tetris-block="piece:I; color:#00e5ff; url:https://jstris.jezevec10.com/"
+        position="-5 15 -5"
+        animation__fall="property:position; from:-5 15 -5; to:-5 -14 -5; loop:true; dur:5200; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:0 360 180; loop:true; dur:5200; easing:linear;">
+      </a-entity>
+
+      <!-- O - 노랑 -->
+      <a-entity tetris-block="piece:O; color:#ffd600; url:https://jstris.jezevec10.com/"
+        position="-2 15 -6"
+        animation__fall="property:position; from:-2 15 -6; to:-2 -14 -6; loop:true; dur:4600; delay:900; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:360 180 0; loop:true; dur:4600; delay:900; easing:linear;">
+      </a-entity>
+
+      <!-- T - 보라 -->
+      <a-entity tetris-block="piece:T; color:#cc00ff; url:https://jstris.jezevec10.com/"
+        position="1 15 -5"
+        animation__fall="property:position; from:1 15 -5; to:1 -14 -5; loop:true; dur:6000; delay:400; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:0 360 360; loop:true; dur:6000; delay:400; easing:linear;">
+      </a-entity>
+
+      <!-- S - 초록 -->
+      <a-entity tetris-block="piece:S; color:#00e676; url:https://jstris.jezevec10.com/"
+        position="4 15 -4"
+        animation__fall="property:position; from:4 15 -4; to:4 -14 -4; loop:true; dur:5600; delay:1600; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:180 0 360; loop:true; dur:5600; delay:1600; easing:linear;">
+      </a-entity>
+
+      <!-- Z - 빨강 -->
+      <a-entity tetris-block="piece:Z; color:#ff1744; url:https://jstris.jezevec10.com/"
+        position="-4 15 -7"
+        animation__fall="property:position; from:-4 15 -7; to:-4 -14 -7; loop:true; dur:7200; delay:300; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:360 360 0; loop:true; dur:7200; delay:300; easing:linear;">
+      </a-entity>
+
+      <!-- L - 주황 -->
+      <a-entity tetris-block="piece:L; color:#ff6d00; url:https://jstris.jezevec10.com/"
+        position="6 15 -6"
+        animation__fall="property:position; from:6 15 -6; to:6 -14 -6; loop:true; dur:4900; delay:2100; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:0 180 360; loop:true; dur:4900; delay:2100; easing:linear;">
+      </a-entity>
+
+      <!-- J - 파랑 -->
+      <a-entity tetris-block="piece:J; color:#2979ff; url:https://jstris.jezevec10.com/"
+        position="-7 15 -5"
+        animation__fall="property:position; from:-7 15 -5; to:-7 -14 -5; loop:true; dur:6400; delay:700; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:360 0 180; loop:true; dur:6400; delay:700; easing:linear;">
+      </a-entity>
+
+      <!-- I - 민트 (두 번째) -->
+      <a-entity tetris-block="piece:I; color:#1de9b6; url:https://jstris.jezevec10.com/"
+        position="2 15 -8"
+        animation__fall="property:position; from:2 15 -8; to:2 -14 -8; loop:true; dur:7800; delay:1300; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:180 360 0; loop:true; dur:7800; delay:1300; easing:linear;">
+      </a-entity>
+
+      <!-- T - 핫핑크 (두 번째) -->
+      <a-entity tetris-block="piece:T; color:#f50057; url:https://jstris.jezevec10.com/"
+        position="-1 15 -4"
+        animation__fall="property:position; from:-1 15 -4; to:-1 -14 -4; loop:true; dur:5400; delay:1800; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:360 360 180; loop:true; dur:5400; delay:1800; easing:linear;">
+      </a-entity>
+
+      <!-- O - 연보라 (두 번째) -->
+      <a-entity tetris-block="piece:O; color:#ea80fc; url:https://jstris.jezevec10.com/"
+        position="7 15 -3"
+        animation__fall="property:position; from:7 15 -3; to:7 -14 -3; loop:true; dur:6700; delay:500; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:0 360 90; loop:true; dur:6700; delay:500; easing:linear;">
+      </a-entity>
+
+      <!-- S - 황록 (두 번째) -->
+      <a-entity tetris-block="piece:S; color:#c6ff00; url:https://jstris.jezevec10.com/"
+        position="-6 15 -6"
+        animation__fall="property:position; from:-6 15 -6; to:-6 -14 -6; loop:true; dur:5900; delay:2500; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:270 180 360; loop:true; dur:5900; delay:2500; easing:linear;">
+      </a-entity>
+
+      <!-- Z - 연주황 (두 번째) -->
+      <a-entity tetris-block="piece:Z; color:#ffab40; url:https://jstris.jezevec10.com/"
+        position="5 15 -7"
+        animation__fall="property:position; from:5 15 -7; to:5 -14 -7; loop:true; dur:6100; delay:1100; easing:linear;"
+        animation__spin="property:rotation; from:0 0 0; to:360 90 270; loop:true; dur:6100; delay:1100; easing:linear;">
+      </a-entity>
+
+      <!-- 마우스 커서 기반 레이캐스터 (카메라와 독립 → 화면 멈춤 없음) -->
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable; far: 40;"></a-entity>
+
+      <a-entity id="camera-rig" position="0 1.6 0">
+        <a-camera position="0 0 0"></a-camera>
+
+        <!-- GLB 3D 모델 - 행성처럼 궤도 회전 + 자전 -->
+        <a-entity
+          rotation="-5 0 0"
+          animation="property: rotation; to: -5 360 0; loop: true; dur: 8000; easing: linear;"
+        >
+          <a-entity
+            id="glb-model"
+            gltf-model="#my-model"
+            position="3.5 0.3 0"
+            scale="0.3 0.3 0.3"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear;"
+          ></a-entity>
+        </a-entity>
+
+        <!-- 🐱 고양이 1 - 주황 태비 (궤도 4.5초, r=2.5) -->
+        <a-entity animation="property: rotation; to: 0 360 0; loop: true; dur: 4500; easing: linear;">
+          <a-entity
+            cat-shape="color: #e07830; innerColor: #ffccaa"
+            position="2.5 0.1 0"
+            scale="0.55 0.55 0.55"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 2200; easing: linear;"
+          ></a-entity>
+        </a-entity>
+
+        <!-- 🐱 고양이 2 - 회색 (궤도 7초, r=4.0, 기울기 14°) -->
+        <a-entity rotation="14 0 0" animation="property: rotation; to: 374 0 0; loop: true; dur: 7000; easing: linear;">
+          <a-entity
+            cat-shape="color: #888899; innerColor: #ddaabb"
+            position="4.0 -0.1 0"
+            scale="0.9 0.9 0.9"
+            animation="property: rotation; to: 360 360 0; loop: true; dur: 3000; easing: linear;"
+          ></a-entity>
+        </a-entity>
+
+        <!-- 🐱 고양이 3 - 흰색 (궤도 10.2초, r=5.5, 기울기 -10°) -->
+        <a-entity rotation="-10 0 0" animation="property: rotation; to: -10 360 0; loop: true; dur: 10200; easing: linear;">
+          <a-entity
+            cat-shape="color: #e8e8f0; innerColor: #ffddee"
+            position="5.5 0.3 0"
+            scale="0.7 0.7 0.7"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 3800; easing: linear;"
+          ></a-entity>
+        </a-entity>
+
+        <!-- 🐱 고양이 4 - 검정 (궤도 6초, r=3.2, 기울기 7°) -->
+        <a-entity rotation="7 0 0" animation="property: rotation; to: 7 360 0; loop: true; dur: 6000; easing: linear;">
+          <a-entity
+            cat-shape="color: #222233; innerColor: #993355"
+            position="3.2 0.2 0"
+            scale="0.6 0.6 0.6"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 2800; easing: linear;"
+          ></a-entity>
+        </a-entity>
+
+        <!-- 🐱 고양이 5 - 카리코/크림 (궤도 12초, r=6.5, 기울기 -20°) -->
+        <a-entity rotation="-20 0 0" animation="property: rotation; to: -20 360 0; loop: true; dur: 12000; easing: linear;">
+          <a-entity
+            cat-shape="color: #c8a070; innerColor: #ffe0cc"
+            position="6.5 0.4 0"
+            scale="0.75 0.75 0.75"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 4500; easing: linear;"
+          ></a-entity>
+        </a-entity>
+      </a-entity>
+    </a-scene>
+  </body>
+</html>
